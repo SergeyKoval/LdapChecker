@@ -1,6 +1,3 @@
-package com.exadel.controller;
-
-
 import com.sun.jndi.ldap.LdapCtxFactory;
 
 import javax.naming.Context;
@@ -11,7 +8,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.util.*;
 
-public class MainController {
+public class LdapChecker {
 
     private static final String INITIAL_CONTEXT_FACTORY_IMPLEMENTATION = "com.sun.jndi.dns.DnsContextFactory";
     private static final String DNS = "dns:";
@@ -45,21 +42,27 @@ public class MainController {
             domain = bread.readLine();
             bread.close();
 
-            MainController main = new MainController();
+            LdapChecker main = new LdapChecker();
+            System.out.println("Reading ldap parametres from common.properties file...");
             main.readLdapParameters();
+            System.out.println("Successfully read");
 
+            System.out.println("Getting top servers...");
             List<String> servers = main.selectTopServers(domain);
             if (servers == null || servers.isEmpty()) {
                 System.out.println("No data");
                 return;
             }
+            System.out.println("Successfully read");
 
+            System.out.println("Getting attributes...");
             PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(new File("results.txt"), true), "UTF-8"));
             for (String ldapUrl : servers) {
                 Map<String, List<String>> userAttributes = main.getUserAttributes(login, password, domain, ldapUrl);
                 String attributesForServer = "For " + ldapUrl + " attributes are:\n\t" + userAttributes;
                 writer.println(attributesForServer);
             }
+            System.out.println("Successfully read");
             writer.close();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
