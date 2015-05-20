@@ -79,7 +79,9 @@ public class LdapChecker {
             System.out.println("Getting ldap attributes...");
             for (String ldapUrl : servers) {
                 Map<String, List<String>> userAttributes = main.getUserAttributes(login, password, domain, ldapUrl);
-                main.fileWriter.println("From ldap '" + ldapUrl + "' next attributes were received:\n\t" + userAttributes);
+                if (userAttributes != null) {
+                    main.fileWriter.println("From ldap '" + ldapUrl + "' next attributes were received:\n\t" + userAttributes);
+                }
             }
             System.out.println("Finish receiving ldap attributes");
             main.fileWriter.close();
@@ -193,6 +195,8 @@ public class LdapChecker {
                 return null;
             }
         } catch (NamingException e) {
+            System.out.println("Error getting user attributes. Read result file for details.");
+            fileWriter.println("Error getting user attributes from ldap '" + ldapUrl + "':" + e.toString());
             return null;
         } finally {
             try {
