@@ -51,6 +51,7 @@ public class LdapChecker {
             System.out.println("Enter domain");
             domain = bread.readLine();
             bread.close();
+            System.out.println("--------------------------");
 
             LdapChecker main = new LdapChecker();
             main.fileWriter = new PrintWriter(new OutputStreamWriter(new FileOutputStream(new File(RESULTS_TXT), true), UTF_8));
