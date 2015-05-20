@@ -80,7 +80,21 @@ public class LdapChecker {
             for (String ldapUrl : servers) {
                 Map<String, List<String>> userAttributes = main.getUserAttributes(login, password, domain, ldapUrl);
                 if (userAttributes != null) {
-                    main.fileWriter.println("From ldap '" + ldapUrl + "' next attributes were received:\n\t" + userAttributes);
+                    StringBuilder result = new StringBuilder();
+                    result.append("From ldap '");
+                    result.append(ldapUrl);
+                    result.append("' next attributes were received:");
+                    for (String userAttribute : userAttributes.keySet()) {
+                        result.append("\n\t");
+                        result.append(userAttribute);
+                        result.append("=");
+                        for (String element : userAttributes.get(userAttribute)) {
+                            result.append("\n\t\t");
+                            result.append(element);
+                        }
+                    }
+
+                    main.fileWriter.println(result);
                 }
             }
             System.out.println("Finish receiving ldap attributes");
