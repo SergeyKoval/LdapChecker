@@ -16,16 +16,26 @@ public class LdapChecker {
     private static final String SRV = "SRV";
     private static final String LDAP = "ldap://";
     private static final String SLASH = "/";
-    private static final String SORT_PATTERN = "%04d/%s";
-    private static final int REACHABLE_TIMEOUT = 200;
+    private static final int REACHABLE_TIMEOUT = 5000;
     private static final String SPECIAL_CHARACTER_AT = "@";
+    private static final String RESULTS_TXT = "results.txt";
+    private static final String UTF_8 = "UTF-8";
+    private static final String CONFIGURATION_FILE_NAME = "common.properties";
+    private static final String EQUALS = "=";
+    private static final String LDAP_USER_BASE = "ldap.user.base";
+    private static final String LDAP_USER_QUERY = "ldap.user.query";
+    private static final String LDAP_USER_ATTRIBUTES = "ldap.user.attributes";
+    private static final String COMMA = ",";
+    private static final String LDAP_GLOBAL_URL_ATTRIBUTE = "ldap.global.url";
 
     private String LDAP_BASE;
     private String LDAP_QUERY;
     private String[] LDAP_SEARCH_ATTRIBUTES;
-    private boolean doNotUsePing;
+    private String LDAP_GLOBAL_URL;
+    private PrintWriter fileWriter;
 
     public static void main (String[] args) {
+        List<String> servers;
         String login = "";
         String password = "";
         String domain = "";
@@ -43,27 +53,35 @@ public class LdapChecker {
             bread.close();
 
             LdapChecker main = new LdapChecker();
-            System.out.println("Reading ldap parametres from common.properties file...");
+            main.fileWriter = new PrintWriter(new OutputStreamWriter(new FileOutputStream(new File(RESULTS_TXT), true), UTF_8));
+
+            System.out.println("Reading ldap parameters from the properties file...");
             main.readLdapParameters();
             System.out.println("Successfully read");
+            main.fileWriter.println("-------Init Ldap check for user '" + login + "' with domain '" + domain + "'-------");
 
-            System.out.println("Getting top servers...");
-            List<String> servers = main.selectTopServers(domain);
-            if (servers == null || servers.isEmpty()) {
-                System.out.println("No data");
-                return;
+            if (main.useGlobalUrl()) {
+                System.out.println("Check direct Ldap Global Url...");
+                main.fileWriter.println("Direct Ldap server is specified: " + main.LDAP_GLOBAL_URL);
+                servers = new ArrayList<String>();
+                servers.add(main.LDAP_GLOBAL_URL);
+            } else {
+                System.out.println("Getting top servers...");
+                servers = main.selectTopServers(domain);
+                if (servers == null || servers.isEmpty()) {
+                    System.out.println("No servers found");
+                    return;
+                }
+                System.out.println("Servers received success");
             }
-            System.out.println("Successfully read");
 
-            System.out.println("Getting attributes...");
-            PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(new File("results.txt"), true), "UTF-8"));
+            System.out.println("Getting ldap attributes...");
             for (String ldapUrl : servers) {
                 Map<String, List<String>> userAttributes = main.getUserAttributes(login, password, domain, ldapUrl);
-                String attributesForServer = "For " + ldapUrl + " attributes are:\n\t" + userAttributes;
-                writer.println(attributesForServer);
+                main.fileWriter.println("From ldap '" + ldapUrl + "' next attributes were received:\n\t" + userAttributes);
             }
-            System.out.println("Successfully read");
-            writer.close();
+            System.out.println("Finish receiving ldap attributes");
+            main.fileWriter.close();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (UnsupportedEncodingException e) {
@@ -89,6 +107,7 @@ public class LdapChecker {
             serverList = new ArrayList<String>();
             for (NamingEnumeration n = a.getAll(); n.hasMore(); ) {
                 String serverString = (String) n.next();
+                fileWriter.println("Receive for domain '" + domain + "' server string '" + serverString + "'");
                 String[] tokens = serverString.split("\\s+");
                 String server = tokens[3];
                 if (server.endsWith(".")) {
@@ -113,59 +132,20 @@ public class LdapChecker {
     public List<String> selectTopServers(String domain) {
         List<String> serverList = getADServers(domain);
         List<String> retList = new ArrayList<String>(serverList.size());
-        if (serverList.isEmpty()) {
-            return null;
-        }
-
-        if (serverList.size() == 1 || doNotUsePing) {
-            for (String serverListItem : serverList) {
-                retList.add(LDAP + serverListItem + SLASH);
-            }
-            return retList;
-        }
-
-        List<String> sortList = new ArrayList<String>(serverList.size());
         for (String serverListItem : serverList) {
-            Formatter f = new Formatter();
             long start = System.currentTimeMillis();
             try {
                 if (InetAddress.getByName(serverListItem).isReachable(REACHABLE_TIMEOUT)) {
                     long duration = System.currentTimeMillis() - start;
-                    sortList.add(f.format(SORT_PATTERN, duration, serverListItem).toString());
+                    fileWriter.println("Server '" + serverListItem + "' in domain '" + domain + "' ping=" + duration);
+                    retList.add(LDAP + serverListItem + SLASH);
                 }
             } catch (IOException e) {
-                //Ignore
+                fileWriter.println("Server '" + serverListItem + "' in domain '" + domain + "' was not able to ping in " + REACHABLE_TIMEOUT);
             }
         }
 
-        if (sortList.isEmpty()) {
-            doNotUsePing = true;
-            for (String serverListItem : serverList) {
-                retList.add(LDAP + serverListItem + SLASH);
-            }
-            return retList;
-        }
-
-        Collections.sort(sortList);
-        for (String sortedListItem : sortList) {
-            String shortLdapUrl = substringAfter(sortedListItem, "/");
-            retList.add(LDAP + shortLdapUrl + SLASH);
-        }
         return retList;
-    }
-
-    private String substringAfter(String str, String separator) {
-        if (str.isEmpty()) {
-            return str;
-        }
-        if (separator == null) {
-            return "";
-        }
-        int pos = str.indexOf(separator);
-        if (pos == -1) {
-            return "";
-        }
-        return str.substring(pos + separator.length());
     }
 
     public Map<String, List<String>> getUserAttributes(String login, String password, String domain, String ldapUrl) {
@@ -238,19 +218,24 @@ public class LdapChecker {
     }
 
     private void readLdapParameters() throws IOException {
-        BufferedReader bread = new BufferedReader(new FileReader("common.properties"));
+        BufferedReader bread = new BufferedReader(new FileReader(CONFIGURATION_FILE_NAME));
 
         Map<String, String> parameters = new HashMap<String, String>();
         String line = bread.readLine();
         while (line != null) {
-            int splitIndex = line.indexOf('=');
+            int splitIndex = line.indexOf(EQUALS);
             if (splitIndex != -1) {
                 parameters.put(line.substring(0, splitIndex), line.substring(splitIndex + 1));
             }
             line = bread.readLine();
         }
-        this.LDAP_BASE = parameters.get("ldap.user.base");
-        this.LDAP_QUERY = parameters.get("ldap.user.query");
-        this.LDAP_SEARCH_ATTRIBUTES = parameters.get("ldap.user.attributes").split(",");
+        this.LDAP_BASE = parameters.get(LDAP_USER_BASE);
+        this.LDAP_QUERY = parameters.get(LDAP_USER_QUERY);
+        this.LDAP_SEARCH_ATTRIBUTES = parameters.get(LDAP_USER_ATTRIBUTES).split(COMMA);
+        this.LDAP_GLOBAL_URL = parameters.get(LDAP_GLOBAL_URL_ATTRIBUTE);
+    }
+
+    private boolean useGlobalUrl() {
+        return LDAP_GLOBAL_URL != null && LDAP_GLOBAL_URL.length() > 0;
     }
 }
