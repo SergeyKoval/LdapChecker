@@ -27,11 +27,15 @@ public class LdapChecker {
     private static final String LDAP_USER_ATTRIBUTES = "ldap.user.attributes";
     private static final String COMMA = ",";
     private static final String LDAP_GLOBAL_URL_ATTRIBUTE = "ldap.global.url";
+    private static final String LDAP_AUTODISCOVER_FILTER = "(&(objectClass=serviceConnectionPoint)(|(keywords=67661d7F-8FC4-4fa7-BFAC-E1D7794C1F68)(keywords=77378F46-2C66-4aa9-A6A6-3E7A48B19596)))";
+    private static final String LDAP_AUTODISCOVER_ATTRIBUTE = "ldap.autodiscover.attribute";
+    private static final String CONFIGURATION_BASE = "cn=Configuration";
 
     private String LDAP_BASE;
     private String LDAP_QUERY;
     private String[] LDAP_SEARCH_ATTRIBUTES;
     private String LDAP_GLOBAL_URL;
+    private String[] LDAP_AUTODISCOVER_ATTRIBUTE_VALUE;
     private PrintWriter fileWriter;
 
     public static void main (String[] args) {
@@ -188,24 +192,29 @@ public class LdapChecker {
     }
 
     public Map<String, List<String>> getUserAttributes(String login, String password, String domain, String ldapUrl) {
-
         Properties authorizationProperties = prepareAuthorizationProperties(login, domain, password);
-        Map<String, List<String>> attrMap = getUserAttributesFromLdap(login, ldapUrl, authorizationProperties);
+        String searchFilter = String.format(LDAP_QUERY, login);
+        Map<String, List<String>> attrMap = getUserAttributesFromLdap(searchFilter, ldapUrl, authorizationProperties, LDAP_SEARCH_ATTRIBUTES, LDAP_BASE);
+
+        if (LDAP_SEARCH_ATTRIBUTES != null) {
+            Map<String, List<String>> autodiscoverAttrMap = getUserAttributesFromLdap(LDAP_AUTODISCOVER_FILTER, ldapUrl, authorizationProperties, LDAP_AUTODISCOVER_ATTRIBUTE_VALUE, CONFIGURATION_BASE + COMMA + LDAP_BASE);
+            if (autodiscoverAttrMap != null && !autodiscoverAttrMap.isEmpty()) {
+                attrMap.putAll(autodiscoverAttrMap);
+            }
+        }
         return attrMap;
     }
 
-    private Map<String, List<String>> getUserAttributesFromLdap(String username, String ldapUrl, Properties authorizationProperties) {
-        String searchFilter = String.format(LDAP_QUERY, username);
-
+    private Map<String, List<String>> getUserAttributesFromLdap(String searchFilter, String ldapUrl, Properties authorizationProperties, String[] returningAttributes, String ldapBase) {
         SearchControls searchControls = new SearchControls();
-        searchControls.setReturningAttributes(LDAP_SEARCH_ATTRIBUTES);
+        searchControls.setReturningAttributes(returningAttributes);
         searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
 
         DirContext context = null;
         NamingEnumeration answer = null;
         try {
             context = LdapCtxFactory.getLdapCtxInstance(ldapUrl, authorizationProperties);
-            answer = context.search(LDAP_BASE, searchFilter, searchControls);
+            answer = context.search(ldapBase, searchFilter, searchControls);
             if (answer.hasMore()) {
                 SearchResult sr = (SearchResult) answer.next();
                 Attributes attributes = sr.getAttributes();
@@ -274,6 +283,13 @@ public class LdapChecker {
         this.LDAP_QUERY = parameters.get(LDAP_USER_QUERY);
         this.LDAP_SEARCH_ATTRIBUTES = parameters.get(LDAP_USER_ATTRIBUTES).split(COMMA);
         this.LDAP_GLOBAL_URL = parameters.get(LDAP_GLOBAL_URL_ATTRIBUTE);
+
+        String autodiscoverAttribute = parameters.get(LDAP_AUTODISCOVER_ATTRIBUTE);
+        if (autodiscoverAttribute != null && autodiscoverAttribute.length() > 0) {
+            this.LDAP_AUTODISCOVER_ATTRIBUTE_VALUE = new String[]{autodiscoverAttribute};
+        } else {
+            this.LDAP_AUTODISCOVER_ATTRIBUTE_VALUE = null;
+        }
     }
 
     private boolean useGlobalUrl() {
