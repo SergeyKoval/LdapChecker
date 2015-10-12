@@ -59,11 +59,29 @@ public class LdapChecker {
             System.out.println("Reading ldap parameters from the properties file...");
             main.readLdapParameters();
             System.out.println("Successfully read");
+            if (main.LDAP_BASE == null || main.LDAP_BASE.length() == 0) {
+                System.out.println("Parse ldap.base from domain...");
+                String[] domainItems = domain.split("\\.");
+                StringBuilder ldapBaseBuilder = new StringBuilder();
+                for (String domainItem : domainItems) {
+                    ldapBaseBuilder.append("dc=");
+                    ldapBaseBuilder.append(domainItem);
+                    ldapBaseBuilder.append(",");
+                }
+                if (ldapBaseBuilder.length() > 0) {
+                    ldapBaseBuilder.deleteCharAt(ldapBaseBuilder.length() - 1);
+                }
+                main.LDAP_BASE = ldapBaseBuilder.toString();
+                System.out.println("ldap.base=" + main.LDAP_BASE);
+                main.fileWriter.println("ldap.base=" + main.LDAP_BASE);
+            }
             main.fileWriter.println("-------Init Ldap check for user '" + login + "' with domain '" + domain + "'-------");
+            System.out.println("-------Init Ldap check for user '" + login + "' with domain '" + domain + "'-------");
 
             if (main.useGlobalUrl()) {
                 System.out.println("Check direct Ldap Global Url...");
                 main.fileWriter.println("Direct Ldap server is specified: " + main.LDAP_GLOBAL_URL);
+                System.out.println("Direct Ldap server is specified: " + main.LDAP_GLOBAL_URL);
                 servers = new ArrayList<String>();
                 servers.add(main.LDAP_GLOBAL_URL);
             } else {
@@ -95,6 +113,7 @@ public class LdapChecker {
                     }
 
                     main.fileWriter.println(result);
+                    System.out.println(result);
                 }
             }
             System.out.println("Finish receiving ldap attributes");
@@ -125,6 +144,7 @@ public class LdapChecker {
             for (NamingEnumeration n = a.getAll(); n.hasMore(); ) {
                 String serverString = (String) n.next();
                 fileWriter.println("Receive for domain '" + domain + "' server string '" + serverString + "'");
+                System.out.println("Receive for domain '" + domain + "' server string '" + serverString + "'");
                 String[] tokens = serverString.split("\\s+");
                 String server = tokens[3];
                 if (server.endsWith(".")) {
@@ -155,10 +175,12 @@ public class LdapChecker {
                 if (InetAddress.getByName(serverListItem).isReachable(REACHABLE_TIMEOUT)) {
                     long duration = System.currentTimeMillis() - start;
                     fileWriter.println("Server '" + serverListItem + "' in domain '" + domain + "' ping=" + duration);
+                    System.out.println("Server '" + serverListItem + "' in domain '" + domain + "' ping=" + duration);
                     retList.add(LDAP + serverListItem + SLASH);
                 }
             } catch (IOException e) {
                 fileWriter.println("Server '" + serverListItem + "' in domain '" + domain + "' was not able to ping in " + REACHABLE_TIMEOUT);
+                System.out.println("Server '" + serverListItem + "' in domain '" + domain + "' was not able to ping in " + REACHABLE_TIMEOUT);
             }
         }
 
@@ -209,7 +231,7 @@ public class LdapChecker {
                 return null;
             }
         } catch (NamingException e) {
-            System.out.println("Error getting user attributes. Read result file for details.");
+            System.out.println("Error getting user attributes from ldap '" + ldapUrl + "':" + e.toString());
             fileWriter.println("Error getting user attributes from ldap '" + ldapUrl + "':" + e.toString());
             return null;
         } finally {
